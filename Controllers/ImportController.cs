@@ -1,5 +1,6 @@
 ﻿using ChallengeAPI.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Collections.Concurrent;
 using System.IO.Compression;
 
 namespace ChallengeAPI.Controllers
@@ -21,44 +22,120 @@ namespace ChallengeAPI.Controllers
             public IFormFile File { get; set; }
         }
 
-        [HttpPost("import-orders")]
+        // Thread-safe dictionary to store metrics per file type
+        private static readonly ConcurrentDictionary<string, ImportMetrics> _metrics =
+            new ConcurrentDictionary<string, ImportMetrics>();
+
+        public class ImportMetrics
+        {
+            public int RowsProcessed { get; set; }
+            public int RowsImported { get; set; }
+            public int RowsSkipped { get; set; }
+            public List<string> Errors { get; set; } = new();
+        }
+
+        // ===========================
+        // Metrics endpoint
+        // GET: api/import/metrics/{type}
+        // ===========================
+        [HttpGet("metrics/{type}")]
+        public IActionResult GetMetrics(string type)
+        {
+            if (_metrics.TryGetValue(type.ToLower(), out var metrics))
+                return Ok(metrics);
+
+            return NotFound(new { message = $"No metrics available for '{type}'" });
+        }
+
+        // Helper: update metrics from CsvService after import
+        internal static void SetMetrics(string type, int processed, int imported, int skipped, List<string> errors)
+        {
+            _metrics[type.ToLower()] = new ImportMetrics
+            {
+                RowsProcessed = processed,
+                RowsImported = imported,
+                RowsSkipped = skipped,
+                Errors = errors
+            };
+        }
+
+        // ===========================
+        // Import endpoints
+        // ===========================
+        [HttpPost("orders")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> ImportOrders([FromForm] FileUploadRequest request)
         {
-            if (request.File == null) return BadRequest("Orders file required.");
-            await using var stream = await GetDecompressedStream(request.File);
-            await _csvService.ImportOrdersCsvAsync(stream);
-            return Ok("Orders imported successfully.");
+            if (request.File == null)
+                return BadRequest(new { message = "Orders file is required." });
+
+            try
+            {
+                await using var stream = await GetDecompressedStream(request.File);
+                await _csvService.ImportOrdersCsvAsync(stream);
+                return Ok(new { message = "Orders imported successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Failed to import orders.", error = ex.Message });
+            }
         }
 
-        [HttpPost("import-orderdetails")]
+        [HttpPost("orderdetails")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> ImportOrderDetails([FromForm] FileUploadRequest request)
         {
-            if (request.File == null) return BadRequest("OrderDetails file required.");
-            await using var stream = await GetDecompressedStream(request.File);
-            await _csvService.ImportOrderDetailsCsvAsync(stream);
-            return Ok("OrderDetails imported successfully.");
+            if (request.File == null)
+                return BadRequest(new { message = "OrderDetails file is required." });
+
+            try
+            {
+                await using var stream = await GetDecompressedStream(request.File);
+                await _csvService.ImportOrderDetailsCsvAsync(stream);
+                return Ok(new { message = "OrderDetails imported successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Failed to import order details.", error = ex.Message });
+            }
         }
 
-        [HttpPost("import-pizzatypes")]
+        [HttpPost("pizzatypes")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> ImportPizzaTypes([FromForm] FileUploadRequest request)
         {
-            if (request.File == null) return BadRequest("PizzaTypes file required.");
-            await using var stream = await GetDecompressedStream(request.File);
-            await _csvService.ImportPizzaTypesCsvAsync(stream);
-            return Ok("PizzaTypes imported successfully.");
+            if (request.File == null)
+                return BadRequest(new { message = "PizzaTypes file is required." });
+
+            try
+            {
+                await using var stream = await GetDecompressedStream(request.File);
+                await _csvService.ImportPizzaTypesCsvAsync(stream);
+                return Ok(new { message = "PizzaTypes imported successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Failed to import pizza types.", error = ex.Message });
+            }
         }
 
-        [HttpPost("import-pizzas")]
+        [HttpPost("pizzas")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> ImportPizzas([FromForm] FileUploadRequest request)
         {
-            if (request.File == null) return BadRequest("Pizzas file required.");
-            await using var stream = await GetDecompressedStream(request.File);
-            await _csvService.ImportPizzasCsvAsync(stream);
-            return Ok("Pizzas imported successfully.");
+            if (request.File == null)
+                return BadRequest(new { message = "Pizzas file is required." });
+
+            try
+            {
+                await using var stream = await GetDecompressedStream(request.File);
+                await _csvService.ImportPizzasCsvAsync(stream);
+                return Ok(new { message = "Pizzas imported successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Failed to import pizzas.", error = ex.Message });
+            }
         }
 
         // Helper: decompress GZip file if needed

@@ -84,7 +84,8 @@
             var compressedContent = await GetCompressedFileContent(file);
             content.Add(compressedContent, "file", file.Name + ".gz");
 
-            var response = await Http.PostAsync($"https://localhost:7093/api/import/import-{type}", content);
+            // Updated route without "import-" prefix
+            var response = await Http.PostAsync($"https://localhost:7093/api/import/{type}", content);
             var msg = response.IsSuccessStatusCode
                 ? $"{type} imported successfully"
                 : $"Error importing {type}";

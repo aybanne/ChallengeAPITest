@@ -2,6 +2,7 @@
 using ChallengeAPI.Models;
 using CsvHelper;
 using CsvHelper.Configuration;
+using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.IO.Compression;
 
@@ -17,20 +18,35 @@ namespace ChallengeAPI.Services
             _context = context;
         }
 
-        // -----------------------
-        // Import PizzaTypes CSV
-        // -----------------------
-        public async Task ImportPizzaTypesCsvAsync(Stream csvStream)
+        // ========================
+        // Import Result DTO
+        // ========================
+        public class ImportResult
         {
+            public int Total { get; set; }
+            public int Imported { get; set; }
+            public int Skipped { get; set; }
+            public List<string> SkippedIds { get; set; } = new();
+        }
+
+        // ========================
+        // Import PizzaTypes CSV
+        // ========================
+        public async Task<ImportResult> ImportPizzaTypesCsvAsync(Stream csvStream)
+        {
+            var result = new ImportResult();
+            var batch = new List<PizzaType>();
+
             using var reader = new StreamReader(csvStream);
             using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
             csv.Context.RegisterClassMap<PizzaTypeCsvMap>();
 
-            var batch = new List<PizzaType>();
+            var existingIds = await _context.PizzaTypes.Select(pt => pt.Id).ToListAsync();
 
             await foreach (var record in csv.GetRecordsAsync<PizzaTypeCsv>())
             {
-                if (!_context.PizzaTypes.Any(pt => pt.Id == record.PizzaTypeId))
+                result.Total++;
+                if (!existingIds.Contains(record.PizzaTypeId))
                 {
                     batch.Add(new PizzaType
                     {
@@ -41,35 +57,39 @@ namespace ChallengeAPI.Services
                     });
 
                     if (batch.Count >= BatchSize)
-                    {
-                        await _context.AddRangeAsync(batch);
-                        await _context.SaveChangesAsync();
-                        batch.Clear();
-                    }
+                        await SaveBatchAsync(batch, result);
+                }
+                else
+                {
+                    result.Skipped++;
+                    result.SkippedIds.Add(record.PizzaTypeId);
                 }
             }
 
             if (batch.Any())
-            {
-                await _context.AddRangeAsync(batch);
-                await _context.SaveChangesAsync();
-            }
+                await SaveBatchAsync(batch, result);
+
+            return result;
         }
 
-        // -----------------------
+        // ========================
         // Import Pizzas CSV
-        // -----------------------
-        public async Task ImportPizzasCsvAsync(Stream csvStream)
+        // ========================
+        public async Task<ImportResult> ImportPizzasCsvAsync(Stream csvStream)
         {
+            var result = new ImportResult();
+            var batch = new List<Pizza>();
+
             using var reader = new StreamReader(csvStream);
             using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
             csv.Context.RegisterClassMap<PizzaCsvMap>();
 
-            var batch = new List<Pizza>();
+            var existingIds = await _context.Pizzas.Select(p => p.Id).ToListAsync();
 
             await foreach (var record in csv.GetRecordsAsync<PizzaCsv>())
             {
-                if (!_context.Pizzas.Any(p => p.Id == record.PizzaId))
+                result.Total++;
+                if (!existingIds.Contains(record.PizzaId))
                 {
                     batch.Add(new Pizza
                     {
@@ -80,35 +100,39 @@ namespace ChallengeAPI.Services
                     });
 
                     if (batch.Count >= BatchSize)
-                    {
-                        await _context.AddRangeAsync(batch);
-                        await _context.SaveChangesAsync();
-                        batch.Clear();
-                    }
+                        await SaveBatchAsync(batch, result);
+                }
+                else
+                {
+                    result.Skipped++;
+                    result.SkippedIds.Add(record.PizzaId);
                 }
             }
 
             if (batch.Any())
-            {
-                await _context.AddRangeAsync(batch);
-                await _context.SaveChangesAsync();
-            }
+                await SaveBatchAsync(batch, result);
+
+            return result;
         }
 
-        // -----------------------
+        // ========================
         // Import Orders CSV
-        // -----------------------
-        public async Task ImportOrdersCsvAsync(Stream csvStream)
+        // ========================
+        public async Task<ImportResult> ImportOrdersCsvAsync(Stream csvStream)
         {
+            var result = new ImportResult();
+            var batch = new List<Order>();
+
             using var reader = new StreamReader(csvStream);
             using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
             csv.Context.RegisterClassMap<OrderCsvMap>();
 
-            var batch = new List<Order>();
+            var existingIds = await _context.Orders.Select(o => o.Id).ToListAsync();
 
             await foreach (var record in csv.GetRecordsAsync<OrderCsv>())
             {
-                if (!_context.Orders.Any(o => o.Id == record.OrderId))
+                result.Total++;
+                if (!existingIds.Contains(record.OrderId))
                 {
                     batch.Add(new Order
                     {
@@ -117,39 +141,44 @@ namespace ChallengeAPI.Services
                     });
 
                     if (batch.Count >= BatchSize)
-                    {
-                        await _context.AddRangeAsync(batch);
-                        await _context.SaveChangesAsync();
-                        batch.Clear();
-                    }
+                        await SaveBatchAsync(batch, result);
+                }
+                else
+                {
+                    result.Skipped++;
+                    result.SkippedIds.Add(record.OrderId.ToString());
                 }
             }
 
             if (batch.Any())
-            {
-                await _context.AddRangeAsync(batch);
-                await _context.SaveChangesAsync();
-            }
+                await SaveBatchAsync(batch, result);
+
+            return result;
         }
 
-        // -----------------------
+        // ========================
         // Import OrderDetails CSV
-        // -----------------------
-        public async Task ImportOrderDetailsCsvAsync(Stream csvStream)
+        // ========================
+        public async Task<ImportResult> ImportOrderDetailsCsvAsync(Stream csvStream)
         {
+            var result = new ImportResult();
+            var batch = new List<OrderDetail>();
+            var skippedRows = new List<OrderDetailCsv>();
+
             using var reader = new StreamReader(csvStream);
             using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
             csv.Context.RegisterClassMap<OrderDetailCsvMap>();
 
-            var batch = new List<OrderDetail>();
-            var skippedRows = new List<OrderDetailCsv>();
+            var existingOrderDetailIds = await _context.OrderDetails.Select(od => od.Id).ToListAsync();
+            var existingPizzaIds = await _context.Pizzas.Select(p => p.Id).ToListAsync();
+            var existingOrderIds = await _context.Orders.Select(o => o.Id).ToListAsync();
 
             await foreach (var record in csv.GetRecordsAsync<OrderDetailCsv>())
             {
-                var pizzaExists = _context.Pizzas.Any(p => p.Id == record.PizzaId);
-                var orderExists = _context.Orders.Any(o => o.Id == record.OrderId);
-
-                if (!_context.OrderDetails.Any(od => od.Id == record.OrderDetailsId) && pizzaExists && orderExists)
+                result.Total++;
+                if (!existingOrderDetailIds.Contains(record.OrderDetailsId) &&
+                    existingPizzaIds.Contains(record.PizzaId) &&
+                    existingOrderIds.Contains(record.OrderId))
                 {
                     batch.Add(new OrderDetail
                     {
@@ -160,54 +189,101 @@ namespace ChallengeAPI.Services
                     });
 
                     if (batch.Count >= BatchSize)
-                    {
-                        await _context.AddRangeAsync(batch);
-                        await _context.SaveChangesAsync();
-                        batch.Clear();
-                    }
+                        await SaveBatchAsync(batch, result);
                 }
                 else
                 {
+                    result.Skipped++;
+                    result.SkippedIds.Add(record.OrderDetailsId.ToString());
                     skippedRows.Add(record);
                 }
             }
 
             if (batch.Any())
+                await SaveBatchAsync(batch, result);
+
+            return result;
+        }
+
+        // ========================
+        // Helper:
+        // ========================
+        private async Task SaveBatchAsync<T>(List<T> batch, ImportResult result) where T : class
+        {
+            try
             {
                 await _context.AddRangeAsync(batch);
                 await _context.SaveChangesAsync();
+                result.Imported += batch.Count;
+                batch.Clear();
+            }
+            catch (Exception ex)
+            {
+                // Log failed rows here
+                Console.WriteLine($"Error saving batch: {ex.Message}");
+                batch.Clear(); 
             }
         }
 
-        // -----------------------
-        // CSV helper classes
-        // -----------------------
+        // ========================
+        // CSV Helper Classes
+        // ========================
         public class PizzaTypeCsv { public string PizzaTypeId; public string Name; public string Category; public string Ingredients; }
         public class PizzaCsv { public string PizzaId; public string PizzaTypeId; public string Size; public decimal Price; }
         public class OrderCsv { public int OrderId; public DateTime Date; public TimeSpan Time; }
         public class OrderDetailCsv { public int OrderDetailsId; public int OrderId; public string PizzaId; public int Quantity; }
 
-        // -----------------------
+        // ========================
         // CSV ClassMaps
-        // -----------------------
+        // ========================
         public sealed class PizzaTypeCsvMap : ClassMap<PizzaTypeCsv>
         {
-            public PizzaTypeCsvMap() { Map(m => m.PizzaTypeId).Name("pizza_type_id"); Map(m => m.Name).Name("name"); Map(m => m.Category).Name("category"); Map(m => m.Ingredients).Name("ingredients"); }
+            public PizzaTypeCsvMap()
+            {
+                Map(m => m.PizzaTypeId).Name("pizza_type_id");
+                Map(m => m.Name).Name("name");
+                Map(m => m.Category).Name("category");
+                Map(m => m.Ingredients).Name("ingredients");
+            }
         }
         public sealed class PizzaCsvMap : ClassMap<PizzaCsv>
         {
-            public PizzaCsvMap() { Map(m => m.PizzaId).Name("pizza_id"); Map(m => m.PizzaTypeId).Name("pizza_type_id"); Map(m => m.Size).Name("size"); Map(m => m.Price).Name("price"); }
+            public PizzaCsvMap()
+            {
+                Map(m => m.PizzaId).Name("pizza_id");
+                Map(m => m.PizzaTypeId).Name("pizza_type_id");
+                Map(m => m.Size).Name("size");
+                Map(m => m.Price).Name("price");
+            }
         }
-        public sealed class OrderCsvMap : ClassMap<OrderCsv> { public OrderCsvMap() { Map(m => m.OrderId).Name("order_id"); Map(m => m.Date).Name("date"); Map(m => m.Time).Name("time"); } }
-        public sealed class OrderDetailCsvMap : ClassMap<OrderDetailCsv> { public OrderDetailCsvMap() { Map(m => m.OrderDetailsId).Name("order_details_id"); Map(m => m.OrderId).Name("order_id"); Map(m => m.PizzaId).Name("pizza_id"); Map(m => m.Quantity).Name("quantity"); } }
+        public sealed class OrderCsvMap : ClassMap<OrderCsv>
+        {
+            public OrderCsvMap()
+            {
+                Map(m => m.OrderId).Name("order_id");
+                Map(m => m.Date).Name("date");
+                Map(m => m.Time).Name("time");
+            }
+        }
+        public sealed class OrderDetailCsvMap : ClassMap<OrderDetailCsv>
+        {
+            public OrderDetailCsvMap()
+            {
+                Map(m => m.OrderDetailsId).Name("order_details_id");
+                Map(m => m.OrderId).Name("order_id");
+                Map(m => m.PizzaId).Name("pizza_id");
+                Map(m => m.Quantity).Name("quantity");
+            }
+        }
 
-        // -----------------------
+        // ========================
         // Optional: Compress Stream for Large Files
-        // -----------------------
+        // ========================
         public Stream CompressCsv(Stream inputStream)
         {
             var outputStream = new MemoryStream();
-            using (var gzip = new GZipStream(outputStream, CompressionMode.Compress, true)) inputStream.CopyTo(gzip);
+            using (var gzip = new GZipStream(outputStream, CompressionMode.Compress, true))
+                inputStream.CopyTo(gzip);
             outputStream.Position = 0;
             return outputStream;
         }
