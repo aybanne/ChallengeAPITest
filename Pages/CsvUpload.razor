@@ -1,0 +1,120 @@
+﻿@page "/csv-upload"
+@using Microsoft.JSInterop
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<h3 class="mb-4">CSV Import</h3>
+
+<div class="row g-3">
+
+    @* Orders CSV *@
+    <div class="col-md-6">
+        <div class="card p-3">
+            <h5>Orders CSV</h5>
+            <InputFile OnChange="OnOrdersSelected" class="form-control mb-2" />
+            <button class="btn btn-primary w-100" @onclick="UploadOrders">Upload Orders</button>
+        </div>
+    </div>
+
+    @* OrderDetails CSV *@
+    <div class="col-md-6">
+        <div class="card p-3">
+            <h5>OrderDetails CSV</h5>
+            <InputFile OnChange="OnOrderDetailsSelected" class="form-control mb-2" />
+            <button class="btn btn-primary w-100" @onclick="UploadOrderDetails">Upload OrderDetails</button>
+        </div>
+    </div>
+
+    @* PizzaTypes CSV *@
+    <div class="col-md-6">
+        <div class="card p-3">
+            <h5>Pizza Types CSV</h5>
+            <InputFile OnChange="OnPizzaTypesSelected" class="form-control mb-2" />
+            <button class="btn btn-primary w-100" @onclick="UploadPizzaTypes">Upload Pizza Types</button>
+        </div>
+    </div>
+
+    @* Pizzas CSV *@
+    <div class="col-md-6">
+        <div class="card p-3">
+            <h5>Pizzas CSV</h5>
+            <InputFile OnChange="OnPizzasSelected" class="form-control mb-2" />
+            <button class="btn btn-primary w-100" @onclick="UploadPizzas">Upload Pizzas</button>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    private IBrowserFile ordersFile;
+    private IBrowserFile orderDetailsFile;
+    private IBrowserFile pizzaTypesFile;
+    private IBrowserFile pizzasFile;
+
+    // --------------------------
+    // File selectors
+    // --------------------------
+    private void OnOrdersSelected(InputFileChangeEventArgs e) => ordersFile = e.File;
+    private void OnOrderDetailsSelected(InputFileChangeEventArgs e) => orderDetailsFile = e.File;
+    private void OnPizzaTypesSelected(InputFileChangeEventArgs e) => pizzaTypesFile = e.File;
+    private void OnPizzasSelected(InputFileChangeEventArgs e) => pizzasFile = e.File;
+
+    // --------------------------
+    // Upload triggers
+    // --------------------------
+    private async Task UploadOrders() => await UploadFile(ordersFile, "orders");
+    private async Task UploadOrderDetails() => await UploadFile(orderDetailsFile, "orderdetails");
+    private async Task UploadPizzaTypes() => await UploadFile(pizzaTypesFile, "pizzatypes");
+    private async Task UploadPizzas() => await UploadFile(pizzasFile, "pizzas");
+
+    // --------------------------
+    // Main upload method
+    // --------------------------
+    private async Task UploadFile(IBrowserFile file, string type)
+    {
+        if (file == null)
+        {
+            await JS.InvokeVoidAsync("alert", $"Please select a file for {type}");
+            return;
+        }
+
+        try
+        {
+            var content = new MultipartFormDataContent();
+            var compressedContent = await GetCompressedFileContent(file);
+            content.Add(compressedContent, "file", file.Name + ".gz");
+
+            var response = await Http.PostAsync($"https://localhost:7093/api/import/import-{type}", content);
+            var msg = response.IsSuccessStatusCode
+                ? $"{type} imported successfully"
+                : $"Error importing {type}";
+
+            await JS.InvokeVoidAsync("alert", msg);
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Error uploading {type}: {ex.Message}");
+        }
+    }
+
+    // --------------------------
+    // Compress CSV to GZip stream
+    // --------------------------
+    private async Task<StreamContent> GetCompressedFileContent(IBrowserFile file)
+    {
+        var compressedStream = new MemoryStream();
+        using (var gzip = new System.IO.Compression.GZipStream(compressedStream, System.IO.Compression.CompressionLevel.Optimal, true))
+        {
+            using var fileStream = file.OpenReadStream(30 * 1024 * 1024); // 30 MB limit
+            await fileStream.CopyToAsync(gzip);
+        }
+        compressedStream.Position = 0;
+
+        var content = new StreamContent(compressedStream);
+        content.Headers.Add("Content-Encoding", "gzip");
+        content.Headers.Add("Content-Disposition", $"form-data; name=\"file\"; filename=\"{file.Name}.gz\"");
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+
+        return content;
+    }
+}
