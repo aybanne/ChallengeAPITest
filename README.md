@@ -54,7 +54,7 @@ Update your `appsettings.json` with PostgreSQL connection:
 ```
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5432;Database=pizza_db;Username=postgres;Password=yourpassword"
+    "DefaultConnection": "Host=localhost;Port=5432;Database=challengeapi;Username=yourusername;Password=yourpassword"
   }
 }
 ```
