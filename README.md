@@ -44,7 +44,7 @@ It uses **.NET 10**, **EF Core 10**, and **PostgreSQL**.
 Clone repository:
 
 ```
-git clone <your-repo-url>
+git clone https://github.com/aybanne/ChallengeAPITest
 cd ChallengeAPI
 dotnet restore
 ```
