@@ -1,6 +1,7 @@
 ﻿using ChallengeAPI.Services;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO.Compression;
 
 namespace ChallengeAPI.Controllers
@@ -31,7 +32,8 @@ namespace ChallengeAPI.Controllers
             public int RowsProcessed { get; set; }
             public int RowsImported { get; set; }
             public int RowsSkipped { get; set; }
-            public List<string> Errors { get; set; } = new();
+            public List<string> SkippedIds { get; set; } = new();
+            public long DurationMs { get; set; } // duration in milliseconds
         }
 
         // ===========================
@@ -48,20 +50,22 @@ namespace ChallengeAPI.Controllers
         }
 
         // Helper: update metrics from CsvService after import
-        internal static void SetMetrics(string type, int processed, int imported, int skipped, List<string> errors)
+        internal static void SetMetrics(string type, int processed, int imported, int skipped, List<string> skippedIds, long durationMs)
         {
             _metrics[type.ToLower()] = new ImportMetrics
             {
                 RowsProcessed = processed,
                 RowsImported = imported,
                 RowsSkipped = skipped,
-                Errors = errors
+                SkippedIds = skippedIds,
+                DurationMs = durationMs
             };
         }
 
         // ===========================
         // Import endpoints
         // ===========================
+
         [HttpPost("orders")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> ImportOrders([FromForm] FileUploadRequest request)
@@ -72,8 +76,19 @@ namespace ChallengeAPI.Controllers
             try
             {
                 await using var stream = await GetDecompressedStream(request.File);
-                await _csvService.ImportOrdersCsvAsync(stream);
-                return Ok(new { message = "Orders imported successfully." });
+
+                var stopwatch = Stopwatch.StartNew();
+                var result = await _csvService.ImportOrdersCsvAsync(stream);
+                stopwatch.Stop();
+
+                SetMetrics("orders", result.Total, result.Imported, result.Skipped, result.SkippedIds, stopwatch.ElapsedMilliseconds);
+
+                return Ok(new
+                {
+                    message = "Orders imported successfully.",
+                    metrics = result,
+                    durationMs = stopwatch.ElapsedMilliseconds
+                });
             }
             catch (Exception ex)
             {
@@ -91,8 +106,19 @@ namespace ChallengeAPI.Controllers
             try
             {
                 await using var stream = await GetDecompressedStream(request.File);
-                await _csvService.ImportOrderDetailsCsvAsync(stream);
-                return Ok(new { message = "OrderDetails imported successfully." });
+
+                var stopwatch = Stopwatch.StartNew();
+                var result = await _csvService.ImportOrderDetailsCsvAsync(stream);
+                stopwatch.Stop();
+
+                SetMetrics("orderdetails", result.Total, result.Imported, result.Skipped, result.SkippedIds, stopwatch.ElapsedMilliseconds);
+
+                return Ok(new
+                {
+                    message = "OrderDetails imported successfully.",
+                    metrics = result,
+                    durationMs = stopwatch.ElapsedMilliseconds
+                });
             }
             catch (Exception ex)
             {
@@ -110,8 +136,19 @@ namespace ChallengeAPI.Controllers
             try
             {
                 await using var stream = await GetDecompressedStream(request.File);
-                await _csvService.ImportPizzaTypesCsvAsync(stream);
-                return Ok(new { message = "PizzaTypes imported successfully." });
+
+                var stopwatch = Stopwatch.StartNew();
+                var result = await _csvService.ImportPizzaTypesCsvAsync(stream);
+                stopwatch.Stop();
+
+                SetMetrics("pizzatypes", result.Total, result.Imported, result.Skipped, result.SkippedIds, stopwatch.ElapsedMilliseconds);
+
+                return Ok(new
+                {
+                    message = "PizzaTypes imported successfully.",
+                    metrics = result,
+                    durationMs = stopwatch.ElapsedMilliseconds
+                });
             }
             catch (Exception ex)
             {
@@ -129,8 +166,19 @@ namespace ChallengeAPI.Controllers
             try
             {
                 await using var stream = await GetDecompressedStream(request.File);
-                await _csvService.ImportPizzasCsvAsync(stream);
-                return Ok(new { message = "Pizzas imported successfully." });
+
+                var stopwatch = Stopwatch.StartNew();
+                var result = await _csvService.ImportPizzasCsvAsync(stream);
+                stopwatch.Stop();
+
+                SetMetrics("pizzas", result.Total, result.Imported, result.Skipped, result.SkippedIds, stopwatch.ElapsedMilliseconds);
+
+                return Ok(new
+                {
+                    message = "Pizzas imported successfully.",
+                    metrics = result,
+                    durationMs = stopwatch.ElapsedMilliseconds
+                });
             }
             catch (Exception ex)
             {
