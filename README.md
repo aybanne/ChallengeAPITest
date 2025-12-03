@@ -114,7 +114,7 @@ ChallengeAPI/
 - Files can be uploaded via Swagger UI or frontend  
 - Each CSV processed in batches of 1000 rows  
 - Duplicate entries (by Id) automatically skipped  
-- Metrics recorded per import: processed, imported, skipped, failed  
+- Metrics recorded per import: processed, imported, skipped, failed, time elapsed
 
 ---
 
