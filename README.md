@@ -45,8 +45,7 @@ Clone repository:
 
 ```
 git clone https://github.com/aybanne/ChallengeAPITest
-cd ChallengeAPI
-dotnet restore
+
 ```
 
 Update your `appsettings.json` with PostgreSQL connection:
